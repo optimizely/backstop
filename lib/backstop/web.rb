@@ -8,7 +8,6 @@ module Backstop
   class Application < Sinatra::Base
     configure do
       enable :logging
-      require 'newrelic_rpm'
       @@publisher = nil
     end
 
@@ -42,24 +41,6 @@ module Backstop
 
     get '/health' do
       {'health' => 'ok'}.to_json
-    end
-
-    post '/collectd' do
-      begin
-        data = JSON.parse(request.body.read)
-      rescue JSON::ParserError
-        halt 400, 'JSON is required'
-      end
-      data.each do |item|
-        results = CollectdData.new(item).parse
-        results.each do |r|
-          r['source'] = 'collectd'
-          halt 400, 'missing fields' unless (r[:cloud] && r[:slot] && r[:id] && r[:metric] && r[:value] && r[:measure_time])
-          r[:cloud].gsub!(/\./, '-')
-          send("mitt.#{r[:cloud]}.#{r[:slot]}.#{r[:id]}.#{r[:metric]}", r[:value], r[:measure_time])
-        end
-      end
-      'ok'
     end
     
     post '/github' do

@@ -5,7 +5,9 @@ gem 'sinatra'
 gem 'thin'
 gem 'json'
 gem 'yajl-ruby'
-gem 'newrelic_rpm'
+gem 'foreman'
+gem 'rest-client'
+gem 'json'
 
 group :test do
   gem 'rake'
