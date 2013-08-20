@@ -37,80 +37,43 @@ module Backstop
           @@publisher = nil
         end
       end
+      def send(metric, value)
+        begin
+          publisher.publish(metric, value)
+        rescue
+          publisher.close_all
+          @@publisher = nil
+        end
+      end
     end
 
     get '/health' do
       {'health' => 'ok'}.to_json
     end
     
-    post '/github' do
-      begin
-        data = JSON.parse(params[:payload])
-      rescue JSON::ParserError
-        halt 400, 'JSON is required'
-      end
-      halt 400, 'missing fields' unless (data['repository'] && data['commits'])
-      data['source'] = 'github'
-      data['ref'].gsub!(/\//, '.')
-      data['commits'].each do |commit|
-        repo = data['repository']['name']
-        author = commit['author']['email'].gsub(/[\.@]/, '-')
-        measure_time = DateTime.parse(commit['timestamp']).strftime('%s')
-        send("#{data['source']}.#{repo}.#{data['ref']}.#{author}.#{commit['id']}", 1, measure_time)
-      end
-      'ok'
-    end
 
-    post '/pagerduty' do
+    post '/snippet' do
       begin
-        incident = params
+        data = JSON.parse(params['data'])
       rescue
-        halt 400, 'unknown payload'
+        halt 400, 'No JSON in data key'
       end
-      case incident['service']['name']
-      when 'Pingdom'
-        metric = "pingdom.#{incident['incident_key'].gsub(/\./, '_').gsub(/[\(\)]/, '').gsub(/\s+/, '.')}"
-      when 'nagios'
-        data = incident['trigger_summary_data']
-        outage = data['SERVICEDESC'] === '' ? 'host_down' : data['SERVICEDESC']
-        begin
-          metric = "nagios.#{data['HOSTNAME'].gsub(/\./, '_')}.#{outage}"
-        rescue
-          puts "UNKNOWN ALERT: #{incident.to_json}"
-          halt 400, 'unknown alert'
+      required_fields = %w[accountId browser version]
+      required_fields.each do |field|
+        halt 400, "Missing #{field}" unless data.has_key?(field)
+      end
+      base_key = data.values_at(*required_fields).join(".")
+      optional_fields = %w[cookies.buckets cookies.segments. cookies.pendingLogEvents
+                           cookies.customEvents cookies.total
+                           times.clientRun times.potentialFlash time.main]
+
+      optional_fields.each do |field|
+        if data.has_key?(field)
+          key = [base_key, field].join('.')
+          send(key, data[field])
         end
-      when 'Enterprise Zendesk'
-        metric = "enterprise.zendesk.#{incident['service']['id']}"
-      else
-        puts "UNKNOWN ALERT: #{incident.to_json}"
-        halt 400, 'unknown alert'
       end
-      send("alerts.#{metric}", 1, Time.parse(incident['created_on']).to_i)
-      'ok'
     end
 
-    post '/publish/:name' do
-      begin
-        data = JSON.parse(request.body.read)
-      rescue JSON::ParserError
-        halt 400, 'JSON is required'
-      end
-      if Config.prefixes.include?(params[:name])
-        if data.kind_of? Array
-          data.each do |item|
-            item['source'] = params[:name]
-            halt 400, 'missing fields' unless (item['metric'] && item['value'] && item['measure_time'])
-            send("#{item['source']}.#{item['metric']}", item['value'], item['measure_time'])
-          end 
-        else 
-          data['source'] = params[:name]
-          halt 400, 'missing fields' unless (data['metric'] && data['value'] && data['measure_time'])
-          send("#{data['source']}.#{data['metric']}", data['value'], data['measure_time'])
-        end
-        'ok'
-      else
-        halt 404, 'unknown prefix'
-      end
-    end
   end
 end
