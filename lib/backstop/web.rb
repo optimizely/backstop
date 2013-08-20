@@ -53,6 +53,7 @@ module Backstop
     
 
     post '/snippet' do
+      headers['Access-Control-Allow-Origin'] = '*'
       begin
         data = JSON.parse(params['data'])
       rescue
