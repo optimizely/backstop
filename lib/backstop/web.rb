@@ -55,9 +55,9 @@ module Backstop
     post '/snippet' do
       headers['Access-Control-Allow-Origin'] = '*'
       begin
-        data = JSON.parse(params['data'])
+        data = JSON.parse(request.body.read)
       rescue
-        halt 400, 'No JSON in data key'
+        halt 400, 'Unable to parse JSON'
       end
       required_fields = %w[accountId browser version]
       required_fields.each do |field|
